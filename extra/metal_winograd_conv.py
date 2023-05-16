@@ -11,7 +11,6 @@ COUT = 32
 HW = 32
 K = 3
 assert(K==3) # This implementation only supports 3x3 filters.
-assert(CIN==COUT) # For simplicity for now, can add groups later if needed.
 FLOPS = BS*K*K*CIN*HW*HW*COUT*2
 
 A = np.array([[1, 1, 1, 0], [0, 1, -1, -1]], dtype=np.float32)
@@ -42,10 +41,7 @@ constant float4x4 BT = {shader_str(B.T)};
 kernel void conv(device float *out, device const float *data, device const float *filter, uint3 gid [[thread_position_in_grid]]) {{
   uint x = (gid.x % {HW//2}) * 2;
   uint y = (gid.x / {HW//2}) * 2;
-  //if (x > {INHW-3} || y > {INHW-3}) {{return;}}
   uint cout = gid.y;
-  //uint cin = chan % {CIN};
-  //uint cout = chan / {CIN};
   uint batch = gid.z;
   float2x2 O = float2x2(0,0,0,0);
   for (uint cin = 0; cin < {CIN}; ++cin) {{
