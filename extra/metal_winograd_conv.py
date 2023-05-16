@@ -74,7 +74,7 @@ def timeit(fxn):
   return time.perf_counter() - st
 tm = min([timeit(lambda: prog([BS*COUT*CIN, HW*HW//4, 1], [1,1,1], output, data, filter_buf, wait=True)) for _ in range(20)])
 local_output = output.toCPU().reshape(BS,COUT,HW,HW)
-print(f"{tm*1e6:9.2f} us, would be {FLOPS*1e-9/tm:9.2f} GFLOPS conv in tinygrad")
+print(f"{tm*1e6:9.2f} us, would be {FLOPS*1e-9/tm:9.2f} GFLOPS conv in Joe's Metal shader")
 
 import time, torch, torch.mps
 b = torch.from_numpy(n_data).to('mps')
@@ -83,7 +83,25 @@ def torch_prog(b, c):
   st = time.perf_counter()
   a = torch.nn.functional.conv2d(b, c, padding=1)
   torch.mps.synchronize()
-  np.testing.assert_allclose(local_output, a.cpu(), atol=1e-3)
+  # Uncomment to show correctness of Metal implementation:
+  # np.testing.assert_allclose(local_output, a.cpu(), atol=1e-3)
   return time.perf_counter() - st
 tm = min([torch_prog(b, c) for _ in range(20)])
 print(f"{tm*1e6:9.2f} us, would be {FLOPS*1e-9/tm:9.2f} GFLOPS conv in torch")
+
+from tinygrad.tensor import Tensor
+from tinygrad.jit import TinyJit
+from tinygrad.runtime.ops_metal import METAL
+b = Tensor(n_data)
+c = Tensor(n_conv)
+# TODO: slowness without the JIT I suspect comes from a lack of a caching allocator
+@TinyJit
+def tiny_jit(b, c):
+  return b.conv2d(c, padding=1).realize()
+def tiny_prog(b, c):
+  st = time.perf_counter()
+  a = tiny_jit(b, c)
+  METAL.synchronize()
+  return time.perf_counter() - st
+tm = min([tiny_prog(b, c) for _ in range(5)])
+print(f"{tm*1e6:9.2f} us, would be {FLOPS*1e-9/tm:9.2f} GFLOPS conv in tinygrad")
